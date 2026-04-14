@@ -1407,4 +1407,49 @@ namespace ggml_cuda_mma {
         NO_DEVICE_CODE;
 #endif // AMD_WMMA_AVAILABLE
     }
+
+#if defined(BLACKWELL_MMA_AVAILABLE) && defined(CUDART_VERSION) && CUDART_VERSION >= 12080
+
+    template <int M, int N, int K>
+    struct wgmma_config {
+        static constexpr int m = M;
+        static constexpr int n = N;
+        static constexpr int k = K;
+    };
+
+    static __device__ __forceinline__ void wgmma_load_a_fp4(
+            uint32_t * a_reg,
+            const uint32_t * __restrict__ a_ptr,
+            int stride) {
+        #pragma unroll
+        for (int i = 0; i < 4; ++i) {
+            a_reg[i] = a_ptr[i * stride];
+        }
+    }
+
+    static __device__ __forceinline__ void wgmma_load_b_q8_1(
+            uint32_t * b_reg,
+            const uint32_t * __restrict__ b_ptr,
+            int stride) {
+        #pragma unroll
+        for (int i = 0; i < 4; ++i) {
+            b_reg[i] = b_ptr[i * stride];
+        }
+    }
+
+    static __device__ __forceinline__ float2 wgmma_accumulate_fp4_q8_1(
+            uint32_t a_reg[4],
+            uint32_t b_reg[4],
+            float2 acc) {
+
+        float sum = 0.0f;
+        #pragma unroll
+        for (int i = 0; i < 4; ++i) {
+            sum += __dp4a(a_reg[i], b_reg[i], 0.0f);
+        }
+
+        return make_float2(acc.x + sum, acc.y + sum);
+    }
+
+#endif // BLACKWELL_MMA_AVAILABLE && CUDART_VERSION >= 12080
 }
